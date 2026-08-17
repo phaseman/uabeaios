@@ -9,13 +9,17 @@ This is a touch-friendly Unity bundle editor intended for sideloading through Li
 - List and search all deck `MonoBehaviour` assets.
 - Edit deck names, factions, card IDs, GUID/name values, copy counts, filters, and superpower overrides.
 - Add or remove card and override entries.
-- Open bundles without strategy decks as complete, formatted JSON and edit their Unity type-tree values directly.
-- Switch deck bundles between the guided strategy-deck editor and full-file JSON mode.
-- Validate JSON structure and protected asset IDs before rebuilding.
+- Browse and search every embedded component without expanding the whole bundle into memory.
+- Select one component at a time and edit its Unity type-tree values directly.
+- Open `TextAsset` components such as `DeckRecipesConfig` as their original readable text, with optional JSON formatting.
+- Switch deck bundles between the guided strategy-deck editor and component browser.
+- Validate component structure and protected asset IDs before rebuilding.
 - Rebuild the serialized asset and its containing Unity bundle.
 - Create a timestamped backup beside the selected file when a local path is available. For other file providers, the backup is stored in the editor's Files-visible `Documents/UnityAssetEditor/Backups` folder.
 
 The supplied `recipe_decks_1 2` fixture was detected as Unity `2022.3.68f1`, with 109 total assets and 107 editable deck assets. A round-trip test changes a card count, rebuilds the file, reopens it, and confirms that all 107 decks remain present.
+
+The supplied `data_assets_43` fixture was detected as Unity `2022.3.68f1`, with 2,408 embedded components. The verifier locates `DeckRecipesConfig` by name, edits its embedded JSON text, rebuilds the bundle, and confirms the change after reopening it.
 
 ## Use on iOS
 
@@ -24,6 +28,8 @@ The supplied `recipe_decks_1 2` fixture was detected as Unity `2022.3.68f1`, wit
 3. Choose the `recipe_decks` file from the LiveContainer/SideStore-accessible folder.
 4. Select a deck and make changes.
 5. Tap **Save**. Keep the generated `.bak` file until the game has loaded successfully.
+
+For a file such as `data_assets_43`, search for `DeckRecipesConfig`, select it, tap **View data**, edit the displayed text, and then tap **Save**.
 
 ## Build the IPA with Codemagic (no personal Mac required)
 
@@ -67,12 +73,13 @@ dotnet run --project PvZAssetEditor.Desktop/PvZAssetEditor.Desktop.csproj
 Run the compatibility verifier against a local test file:
 
 ```sh
-dotnet run --project PvZAssetEditor.Verifier/PvZAssetEditor.Verifier.csproj -- "/path/to/recipe_decks"
+dotnet run --project PvZAssetEditor.Verifier/PvZAssetEditor.Verifier.csproj -- \
+  "/path/to/recipe_decks" "/path/to/data_assets_43"
 ```
 
 ## Scope
 
-This is the first PvZ-focused milestone, not yet a complete port of every UABEA plug-in. The underlying asset reader is general-purpose; additional editors for TextAsset, arbitrary type-tree data, textures, audio, and other UABEA operations can be added incrementally.
+This is the first PvZ-focused milestone, not yet a complete port of every UABEA plug-in. The underlying asset reader is general-purpose; additional editors for textures, audio, and other UABEA operations can be added incrementally.
 
 ## License and attribution
 

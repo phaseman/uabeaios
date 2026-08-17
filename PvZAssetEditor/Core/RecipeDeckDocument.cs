@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text;
 using AssetsTools.NET;
 using AssetsTools.NET.Extra;
 using PvZAssetEditor.Models;
@@ -14,7 +15,6 @@ public sealed class RecipeDeckDocument : IDisposable
     private readonly AssetBundleFile _bundle;
     private readonly AssetsFileInstance _assetsInstance;
     private readonly AssetBundleDirectoryInfo _serializedEntry;
-    private readonly IReadOnlyList<GenericAsset> _genericAssets;
 
     private static readonly JsonSerializerOptions PrettyJsonOptions = new()
     {
@@ -29,7 +29,7 @@ public sealed class RecipeDeckDocument : IDisposable
         AssetsFileInstance assetsInstance,
         AssetBundleDirectoryInfo serializedEntry,
         IReadOnlyList<DeckModel> decks,
-        IReadOnlyList<GenericAsset> genericAssets,
+        IReadOnlyList<UnityAssetModel> assets,
         string sourceName)
     {
         _manager = manager;
@@ -38,8 +38,8 @@ public sealed class RecipeDeckDocument : IDisposable
         _bundle = bundle;
         _assetsInstance = assetsInstance;
         _serializedEntry = serializedEntry;
-        _genericAssets = genericAssets;
         Decks = decks;
+        Assets = assets;
         SourceName = sourceName;
     }
 
@@ -50,6 +50,8 @@ public sealed class RecipeDeckDocument : IDisposable
     public int AssetCount => _assetsInstance.file.AssetInfos.Count;
 
     public IReadOnlyList<DeckModel> Decks { get; }
+
+    public IReadOnlyList<UnityAssetModel> Assets { get; }
 
     public static RecipeDeckDocument Load(Stream source, string sourceName)
     {
@@ -90,52 +92,62 @@ public sealed class RecipeDeckDocument : IDisposable
             originalInstance);
 
         assetsInstance.file.GenerateQuickLookup();
-        var decks = new List<DeckModel>();
-        var genericAssets = new List<GenericAsset>();
 
-        foreach (AssetFileInfo info in assetsInstance.file.AssetInfos)
+        UnityAssetModel[] assets = assetsInstance.file.AssetInfos
+            .Select(info => new UnityAssetModel(info, GetClassName(info.TypeId)))
+            .OrderBy(asset => asset.ClassId == (int)AssetClassID.MonoBehaviour ? 0 : 1)
+            .ThenBy(asset => asset.ClassName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(asset => asset.PathId)
+            .ToArray();
+
+        foreach (UnityAssetModel asset in assets.Where(asset => asset.ClassId == (int)AssetClassID.TextAsset))
         {
-            string className = GetClassName(info.TypeId);
-            try
-            {
-                AssetTypeValueField field = manager.GetBaseField(assetsInstance, info, AssetReadFlags.None);
-                JsonNode json = AssetFieldJson.ToJson(field);
-                string displayName = GetDisplayName(field, className, info.PathId);
-                genericAssets.Add(new GenericAsset(info, field.TemplateField, json, className, displayName, null));
+            string? fastName = TryReadTextAssetName(assetsInstance.file, asset.AssetInfo);
+            if (!string.IsNullOrWhiteSpace(fastName))
+                asset.SetDisplayName(fastName);
+        }
 
-                if (info.TypeId != (int)AssetClassID.MonoBehaviour ||
-                    field["m_Name"].IsDummy ||
-                    field["Cards"].IsDummy ||
-                    field["SuperpowerOverrides"].IsDummy)
+        var decks = new List<DeckModel>();
+        if (sourceName.Contains("recipe_decks", StringComparison.OrdinalIgnoreCase))
+        {
+            foreach (UnityAssetModel asset in assets.Where(
+                         asset => asset.ClassId == (int)AssetClassID.MonoBehaviour))
+            {
+                try
                 {
-                    continue;
+                    AssetTypeValueField field = manager.GetBaseField(
+                        assetsInstance,
+                        asset.AssetInfo,
+                        AssetReadFlags.None);
+
+                    if (field["m_Name"].IsDummy ||
+                        field["Cards"].IsDummy ||
+                        field["SuperpowerOverrides"].IsDummy)
+                    {
+                        continue;
+                    }
+
+                    JsonObject deckJson = AssetFieldJson.ToJson(field) as JsonObject
+                        ?? throw new InvalidDataException("Deck root did not deserialize as an object.");
+                    asset.SetDecoded(
+                        field.TemplateField,
+                        deckJson,
+                        GetDisplayName(field, asset.ClassName, asset.PathId));
+
+                    var deck = new DeckModel(
+                        asset.AssetInfo,
+                        field.TemplateField,
+                        deckJson,
+                        field["m_Name"].AsString,
+                        field["Faction"].AsInt);
+
+                    ReadCards(deckJson, "Cards", deck, false);
+                    ReadCards(deckJson, "SuperpowerOverrides", deck, true);
+                    decks.Add(deck);
                 }
-
-                JsonObject deckJson = json as JsonObject
-                    ?? throw new InvalidDataException("Deck root did not deserialize as an object.");
-
-                var deck = new DeckModel(
-                    info,
-                    field.TemplateField,
-                    deckJson,
-                    field["m_Name"].AsString,
-                    field["Faction"].AsInt);
-
-                ReadCards(deckJson, "Cards", deck, false);
-                ReadCards(deckJson, "SuperpowerOverrides", deck, true);
-                decks.Add(deck);
-            }
-            catch (Exception ex)
-            {
-                if (genericAssets.All(asset => asset.AssetInfo.PathId != info.PathId))
+                catch (Exception ex)
                 {
-                    genericAssets.Add(new GenericAsset(
-                        info,
-                        null,
-                        null,
-                        className,
-                        $"{className} #{info.PathId}",
-                        ex.Message));
+                    asset.SetDecodeError(ex.Message);
                 }
             }
         }
@@ -148,47 +160,41 @@ public sealed class RecipeDeckDocument : IDisposable
             assetsInstance,
             serializedEntry,
             decks.OrderBy(deck => deck.Name, StringComparer.OrdinalIgnoreCase).ToArray(),
-            genericAssets,
+            assets,
             sourceName);
     }
 
-    public string ExportFullJson()
+    public string ExportAssetText(UnityAssetModel asset)
     {
-        var assets = new JsonArray();
-        foreach (GenericAsset asset in _genericAssets)
-        {
-            var entry = new JsonObject
-            {
-                ["$pathId"] = asset.AssetInfo.PathId,
-                ["$classId"] = asset.AssetInfo.TypeId,
-                ["$className"] = asset.ClassName,
-                ["$name"] = asset.DisplayName,
-                ["$editable"] = asset.Data is not null
-            };
+        EnsureAssetDecoded(asset);
 
-            if (asset.Data is not null)
-                entry["$data"] = asset.Data.DeepClone();
-            else
-                entry["$error"] = asset.Error ?? "This asset could not be decoded from its Unity type tree.";
-
-            assets.Add(entry);
-        }
+        if (TryGetTextAssetContents(asset, out string? contents))
+            return contents;
 
         var root = new JsonObject
         {
-            ["$format"] = "UnityAssetEditor.FullFile.v1",
+            ["$format"] = "UnityAssetEditor.Asset.v1",
             ["$source"] = SourceName,
             ["$unityVersion"] = UnityVersion,
-            ["$assetCount"] = AssetCount,
-            ["assets"] = assets
+            ["$pathId"] = asset.PathId,
+            ["$classId"] = asset.ClassId,
+            ["$className"] = asset.ClassName,
+            ["$name"] = asset.DisplayName,
+            ["$data"] = asset.OriginalData!.DeepClone()
         };
 
         return root.ToJsonString(PrettyJsonOptions);
     }
 
-    public static string FormatFullJson(string text)
+    public string FormatAssetText(string text, UnityAssetModel asset)
     {
-        JsonObject root = ParseFullJsonRoot(text);
+        if (!Assets.Contains(asset))
+            throw new InvalidOperationException("The selected asset does not belong to the opened file.");
+
+        if (asset.ClassId == (int)AssetClassID.TextAsset)
+            return ParseJson(text).ToJsonString(PrettyJsonOptions);
+
+        JsonObject root = ParseAssetJsonRoot(text);
         return root.ToJsonString(PrettyJsonOptions);
     }
 
@@ -210,67 +216,117 @@ public sealed class RecipeDeckDocument : IDisposable
         return WriteBundle();
     }
 
-    public byte[] BuildFromFullJson(string text)
+    public byte[] BuildFromAssetText(string text, UnityAssetModel asset)
     {
-        JsonObject root = ParseFullJsonRoot(text);
-        JsonArray inputAssets = (JsonArray)root["assets"]!;
+        EnsureAssetDecoded(asset);
 
-        Dictionary<long, GenericAsset> knownAssets = _genericAssets.ToDictionary(asset => asset.AssetInfo.PathId);
-        var inputByPathId = new Dictionary<long, JsonObject>();
+        if (TryGetTextAssetContents(asset, out _))
+            return BuildFromTextAssetContents(text, asset);
 
-        foreach (JsonNode? node in inputAssets)
+        JsonObject root = ParseAssetJsonRoot(text);
+
+        long pathId = root["$pathId"]?.GetValue<long>()
+            ?? throw new InvalidDataException("The asset JSON is missing $pathId.");
+        if (pathId != asset.PathId)
+            throw new InvalidDataException("The selected asset's $pathId cannot be changed.");
+
+        int classId = root["$classId"]?.GetValue<int>()
+            ?? throw new InvalidDataException("The asset JSON is missing $classId.");
+        if (classId != asset.ClassId)
+            throw new InvalidDataException("The selected asset's $classId cannot be changed.");
+
+        JsonNode updatedData = root["$data"]
+            ?? throw new InvalidDataException("The asset JSON is missing $data.");
+        if (JsonNode.DeepEquals(asset.OriginalData, updatedData))
+            throw new InvalidOperationException("There are no changes in the selected asset JSON.");
+
+        byte[] bytes;
+        try
         {
-            JsonObject entry = node as JsonObject
-                ?? throw new InvalidDataException("Every item in assets must be an object.");
-            long pathId = entry["$pathId"]?.GetValue<long>()
-                ?? throw new InvalidDataException("An asset is missing $pathId.");
-
-            if (!inputByPathId.TryAdd(pathId, entry))
-                throw new InvalidDataException($"Asset path ID {pathId} appears more than once.");
-
-            if (!knownAssets.TryGetValue(pathId, out GenericAsset? known))
-                throw new InvalidDataException($"Asset path ID {pathId} does not exist in the opened file.");
-
-            int classId = entry["$classId"]?.GetValue<int>()
-                ?? throw new InvalidDataException($"Asset path ID {pathId} is missing $classId.");
-            if (classId != known.AssetInfo.TypeId)
-                throw new InvalidDataException($"The class ID for asset path ID {pathId} cannot be changed.");
+            bytes = AssetFieldJson.Write(
+                asset.Template!,
+                updatedData,
+                _assetsInstance.file.Header.Endianness);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidDataException(
+                $"Asset path ID {asset.PathId} ({asset.DisplayName}) is not valid: {ex.Message}",
+                ex);
         }
 
-        var updates = new List<(GenericAsset Asset, byte[] Bytes)>();
-        foreach (GenericAsset asset in _genericAssets.Where(asset => asset.Data is not null))
+        asset.AssetInfo.SetNewData(bytes);
+        return WriteBundle();
+    }
+
+    public void MarkClean()
+    {
+        foreach (DeckModel deck in Decks)
+            deck.MarkClean();
+    }
+
+    public void Dispose()
+    {
+        _manager.UnloadAllAssetsFiles(true);
+        _manager.UnloadAllBundleFiles();
+        _bundleData.Dispose();
+    }
+
+    private void EnsureAssetDecoded(UnityAssetModel asset)
+    {
+        if (!Assets.Contains(asset))
+            throw new InvalidOperationException("The selected asset does not belong to the opened file.");
+        if (asset.IsDecoded)
+            return;
+        if (!string.IsNullOrWhiteSpace(asset.DecodeError))
+            throw new InvalidDataException(asset.DecodeError);
+
+        try
         {
-            long pathId = asset.AssetInfo.PathId;
-            if (!inputByPathId.TryGetValue(pathId, out JsonObject? entry))
-                throw new InvalidDataException($"The editable asset with path ID {pathId} is missing.");
+            AssetTypeValueField field = _manager.GetBaseField(
+                _assetsInstance,
+                asset.AssetInfo,
+                AssetReadFlags.None);
+            JsonNode data = AssetFieldJson.ToJson(field);
+            asset.SetDecoded(
+                field.TemplateField,
+                data,
+                GetDisplayName(field, asset.ClassName, asset.PathId));
+        }
+        catch (Exception ex)
+        {
+            asset.SetDecodeError(ex.Message);
+            throw new InvalidDataException(
+                $"Could not decode {asset.ClassName} path ID {asset.PathId}: {ex.Message}",
+                ex);
+        }
+    }
 
-            JsonNode updatedData = entry["$data"]
-                ?? throw new InvalidDataException($"Asset path ID {pathId} is missing $data.");
-            if (JsonNode.DeepEquals(asset.Data, updatedData))
-                continue;
+    private byte[] BuildFromTextAssetContents(string text, UnityAssetModel asset)
+    {
+        JsonObject updatedData = asset.OriginalData!.DeepClone() as JsonObject
+            ?? throw new InvalidDataException("The selected TextAsset data is not an object.");
+        updatedData["m_Script"] = text;
 
-            try
-            {
-                byte[] bytes = AssetFieldJson.Write(
-                    asset.Template!,
-                    updatedData,
-                    _assetsInstance.file.Header.Endianness);
-                updates.Add((asset, bytes));
-            }
-            catch (Exception ex)
-            {
-                throw new InvalidDataException(
-                    $"Asset path ID {pathId} ({asset.DisplayName}) is not valid: {ex.Message}",
-                    ex);
-            }
+        if (JsonNode.DeepEquals(asset.OriginalData, updatedData))
+            throw new InvalidOperationException("There are no changes in the selected text component.");
+
+        byte[] bytes;
+        try
+        {
+            bytes = AssetFieldJson.Write(
+                asset.Template!,
+                updatedData,
+                _assetsInstance.file.Header.Endianness);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidDataException(
+                $"Text component {asset.DisplayName} is not valid: {ex.Message}",
+                ex);
         }
 
-        if (updates.Count == 0)
-            throw new InvalidOperationException("There are no changes in the full-file JSON.");
-
-        foreach ((GenericAsset asset, byte[] bytes) in updates)
-            asset.AssetInfo.SetNewData(bytes);
-
+        asset.AssetInfo.SetNewData(bytes);
         return WriteBundle();
     }
 
@@ -291,19 +347,6 @@ public sealed class RecipeDeckDocument : IDisposable
             _bundle.Write(bundleWriter, 0);
 
         return output.ToArray();
-    }
-
-    public void MarkClean()
-    {
-        foreach (DeckModel deck in Decks)
-            deck.MarkClean();
-    }
-
-    public void Dispose()
-    {
-        _manager.UnloadAllAssetsFiles(true);
-        _manager.UnloadAllBundleFiles();
-        _bundleData.Dispose();
     }
 
     private static void ReadCards(JsonObject root, string sectionName, DeckModel deck, bool superpowerOverride)
@@ -338,23 +381,67 @@ public sealed class RecipeDeckDocument : IDisposable
                })
            ?? throw new InvalidDataException("The JSON editor is empty.");
 
-    private static JsonObject ParseFullJsonRoot(string text)
+    private static JsonObject ParseAssetJsonRoot(string text)
     {
         JsonObject root = ParseJson(text) as JsonObject
-            ?? throw new InvalidDataException("The full-file JSON must start with an object.");
+            ?? throw new InvalidDataException("The asset JSON must start with an object.");
 
-        if (root["$format"]?.GetValue<string>() != "UnityAssetEditor.FullFile.v1")
-            throw new InvalidDataException("This text is not a Unity Asset Editor full-file JSON document.");
-        if (root["assets"] is not JsonArray)
-            throw new InvalidDataException("The JSON document is missing its assets array.");
+        if (root["$format"]?.GetValue<string>() != "UnityAssetEditor.Asset.v1")
+            throw new InvalidDataException("This text is not a Unity Asset Editor asset JSON document.");
+        if (root["$data"] is null)
+            throw new InvalidDataException("The asset JSON is missing $data.");
 
         return root;
+    }
+
+    public static bool IsEditableTextAsset(UnityAssetModel asset)
+        => asset.ClassId == (int)AssetClassID.TextAsset;
+
+    private static bool TryGetTextAssetContents(UnityAssetModel asset, out string contents)
+    {
+        contents = string.Empty;
+        if (!IsEditableTextAsset(asset) || asset.OriginalData is not JsonObject data)
+            return false;
+
+        JsonNode? script = data["m_Script"];
+        if (script is null)
+            return false;
+
+        try
+        {
+            contents = script.GetValue<string>();
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static string GetClassName(int typeId)
         => Enum.IsDefined(typeof(AssetClassID), typeId)
             ? ((AssetClassID)typeId).ToString()
             : $"ClassID_{typeId}";
+
+    private static string? TryReadTextAssetName(AssetsFile file, AssetFileInfo info)
+    {
+        const int maximumNameBytes = 4096;
+
+        try
+        {
+            AssetsFileReader reader = file.Reader;
+            reader.Position = info.GetAbsoluteByteOffset(file);
+            int byteCount = reader.ReadInt32();
+            if (byteCount <= 0 || byteCount > maximumNameBytes || byteCount > info.ByteSize - sizeof(int))
+                return null;
+
+            return Encoding.UTF8.GetString(reader.ReadBytes(byteCount));
+        }
+        catch
+        {
+            return null;
+        }
+    }
 
     private static string GetDisplayName(AssetTypeValueField field, string className, long pathId)
     {
@@ -364,12 +451,4 @@ public sealed class RecipeDeckDocument : IDisposable
 
         return $"{className} #{pathId}";
     }
-
-    private sealed record GenericAsset(
-        AssetFileInfo AssetInfo,
-        AssetTypeTemplateField? Template,
-        JsonNode? Data,
-        string ClassName,
-        string DisplayName,
-        string? Error);
 }

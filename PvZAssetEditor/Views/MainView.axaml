@@ -176,22 +176,55 @@
                     </ItemsControl>
                 </StackPanel>
 
-                <StackPanel IsVisible="{Binding IsFullJsonEditorVisible}" Spacing="10">
+                <StackPanel IsVisible="{Binding IsAssetEditorVisible}" Spacing="10">
                     <Border Classes="card">
                         <StackPanel Spacing="7">
                             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
-                                <TextBlock Grid.Column="0" Text="Complete Unity file data"
+                                <TextBlock Grid.Column="0" Text="Embedded components"
                                            FontSize="17" FontWeight="Bold" VerticalAlignment="Center" />
-                                <Button Grid.Column="1" Classes="secondary" Content="Format / Check"
-                                        Click="FormatJson_Click" />
+                                <Button Grid.Column="1" Classes="secondary" Content="View data"
+                                        Click="ViewAsset_Click" />
                             </Grid>
                             <TextBlock FontSize="12" Opacity="0.74" TextWrapping="Wrap"
-                                       Text="Edit values within each $data object. Keep $pathId and $classId unchanged. Assets that cannot be decoded remain listed with a $error value and are preserved when saving." />
+                                       Text="Search or scroll through the bundle, select a component, then tap View data. Only the selected component is expanded into editable text." />
                         </StackPanel>
                     </Border>
 
+                    <TextBox Text="{Binding AssetSearchText}"
+                             Watermark="Search components, e.g. DeckRecipesConfig" />
+
+                    <ListBox ItemsSource="{Binding VisibleAssets}"
+                             SelectedItem="{Binding SelectedAsset}"
+                             Height="280"
+                             HorizontalAlignment="Stretch">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="models:UnityAssetModel">
+                                <StackPanel Margin="4,5" Spacing="2">
+                                    <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <TextBlock Text="{Binding ClassName}" FontSize="11" Opacity="0.66" />
+                                        <TextBlock Text="{Binding PathId, StringFormat='Path ID {0}'}"
+                                                   FontSize="11" Opacity="0.66" />
+                                        <TextBlock Text="{Binding ByteSize, StringFormat='{}{0} bytes'}"
+                                                   FontSize="11" Opacity="0.66" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                        <TextBlock Grid.Column="0" Text="{Binding AssetEditorTitle}"
+                                   FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        <Button Grid.Column="1" Classes="secondary" Content="{Binding AssetFormatButtonText}"
+                                IsEnabled="{Binding CanEditSelectedAsset}"
+                                Click="FormatJson_Click" />
+                    </Grid>
+
                     <TextBox x:Name="RawJsonEditor"
-                             Text="{Binding FullJsonText, Mode=OneWay}"
+                             Text="{Binding AssetJsonText, Mode=OneWay}"
+                             IsEnabled="{Binding CanEditSelectedAsset}"
                              AcceptsReturn="True"
                              TextWrapping="NoWrap"
                              FontFamily="monospace"

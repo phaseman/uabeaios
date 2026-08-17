@@ -8,6 +8,7 @@ namespace PvZAssetEditor.ViewModels;
 public sealed partial class MainViewModel : ViewModelBase
 {
     private RecipeDeckDocument? _document;
+    private string _loadedAssetBaseline = string.Empty;
 
     [ObservableProperty]
     private string _fileName = "No file open";
@@ -22,7 +23,16 @@ public sealed partial class MainViewModel : ViewModelBase
     private string _searchText = string.Empty;
 
     [ObservableProperty]
+    private string _assetSearchText = string.Empty;
+
+    [ObservableProperty]
     private DeckModel? _selectedDeck;
+
+    [ObservableProperty]
+    private UnityAssetModel? _selectedAsset;
+
+    [ObservableProperty]
+    private UnityAssetModel? _loadedAsset;
 
     [ObservableProperty]
     private bool _hasDocument;
@@ -31,21 +41,32 @@ public sealed partial class MainViewModel : ViewModelBase
     private bool _isBusy;
 
     [ObservableProperty]
-    private string _fullJsonText = string.Empty;
+    private string _assetJsonText = string.Empty;
 
     [ObservableProperty]
     private bool _isDeckEditorVisible;
 
     [ObservableProperty]
-    private bool _isFullJsonEditorVisible;
+    private bool _isAssetEditorVisible;
 
     [ObservableProperty]
     private bool _canSwitchEditorMode;
 
     [ObservableProperty]
-    private string _editorModeButtonText = "Full JSON";
+    private bool _canEditSelectedAsset;
+
+    [ObservableProperty]
+    private string _assetEditorTitle = "Selected component data";
+
+    [ObservableProperty]
+    private string _assetFormatButtonText = "Format / Check";
+
+    [ObservableProperty]
+    private string _editorModeButtonText = "Components";
 
     public ObservableCollection<DeckModel> VisibleDecks { get; } = [];
+
+    public ObservableCollection<UnityAssetModel> VisibleAssets { get; } = [];
 
     public RecipeDeckDocument? Document => _document;
 
@@ -55,19 +76,29 @@ public sealed partial class MainViewModel : ViewModelBase
         _document = document;
         FileName = document.SourceName;
         FileSummary = document.Decks.Count > 0
-            ? $"Unity {document.UnityVersion} • {document.Decks.Count} decks • {document.AssetCount} assets"
-            : $"Unity {document.UnityVersion} • Full JSON • {document.AssetCount} assets";
+            ? $"Unity {document.UnityVersion} • {document.Decks.Count} decks • {document.AssetCount} components"
+            : $"Unity {document.UnityVersion} • {document.AssetCount} components";
         HasDocument = true;
         CanSwitchEditorMode = document.Decks.Count > 0;
         IsDeckEditorVisible = CanSwitchEditorMode;
-        IsFullJsonEditorVisible = !CanSwitchEditorMode;
-        EditorModeButtonText = IsFullJsonEditorVisible ? "Strategy decks" : "Full JSON";
-        FullJsonText = IsFullJsonEditorVisible ? document.ExportFullJson() : string.Empty;
+        IsAssetEditorVisible = !CanSwitchEditorMode;
+        EditorModeButtonText = IsAssetEditorVisible ? "Strategy decks" : "Components";
+        AssetJsonText = string.Empty;
+        _loadedAssetBaseline = string.Empty;
+        LoadedAsset = null;
+        CanEditSelectedAsset = false;
+
         SearchText = string.Empty;
-        ApplyFilter();
+        AssetSearchText = string.Empty;
+        ApplyDeckFilter();
+        ApplyAssetFilter();
         SelectedDeck = VisibleDecks.FirstOrDefault();
-        StatusMessage = IsFullJsonEditorVisible
-            ? "Full JSON mode. Edit values inside $data, then tap Save. Metadata beginning with $ is protected."
+        SelectedAsset = VisibleAssets.FirstOrDefault(asset =>
+                            asset.DisplayName.Equals("DeckRecipesConfig", StringComparison.OrdinalIgnoreCase))
+                        ?? VisibleAssets.FirstOrDefault();
+
+        StatusMessage = IsAssetEditorVisible
+            ? $"Indexed {document.AssetCount} components without expanding them. Search or scroll, select one, then tap View data."
             : "Ready. Select a deck, make changes, then tap Save.";
     }
 
@@ -76,9 +107,12 @@ public sealed partial class MainViewModel : ViewModelBase
         if (_document is null)
             throw new InvalidOperationException("No file is open.");
 
-        return IsFullJsonEditorVisible
-            ? _document.BuildFromFullJson(FullJsonText)
-            : _document.Build();
+        if (!IsAssetEditorVisible)
+            return _document.Build();
+        if (LoadedAsset is null)
+            throw new InvalidOperationException("Select a component and tap View data before saving.");
+
+        return _document.BuildFromAssetText(AssetJsonText, LoadedAsset);
     }
 
     public void ToggleEditorMode()
@@ -86,24 +120,64 @@ public sealed partial class MainViewModel : ViewModelBase
         if (_document is null || !CanSwitchEditorMode)
             return;
 
-        IsFullJsonEditorVisible = !IsFullJsonEditorVisible;
-        IsDeckEditorVisible = !IsFullJsonEditorVisible;
-        EditorModeButtonText = IsFullJsonEditorVisible ? "Strategy decks" : "Full JSON";
-
-        if (IsFullJsonEditorVisible && string.IsNullOrEmpty(FullJsonText))
-            FullJsonText = _document.ExportFullJson();
-
-        StatusMessage = IsFullJsonEditorVisible
-            ? "Full JSON mode. Edit values inside $data, then tap Save. Metadata beginning with $ is protected."
+        IsAssetEditorVisible = !IsAssetEditorVisible;
+        IsDeckEditorVisible = !IsAssetEditorVisible;
+        EditorModeButtonText = IsAssetEditorVisible ? "Strategy decks" : "Components";
+        StatusMessage = IsAssetEditorVisible
+            ? $"Indexed {_document.AssetCount} components. Search or scroll, select one, then tap View data."
             : "Strategy deck mode. Select a deck, make changes, then tap Save.";
     }
 
-    public void FormatFullJson()
+    public void LoadSelectedAsset()
     {
+        if (_document is null || SelectedAsset is null)
+        {
+            StatusMessage = "Select a component first.";
+            return;
+        }
+
+        if (LoadedAsset is not null &&
+            !ReferenceEquals(LoadedAsset, SelectedAsset) &&
+            !string.Equals(AssetJsonText, _loadedAssetBaseline, StringComparison.Ordinal))
+        {
+            StatusMessage = "Save the current component, or undo its text changes, before viewing another component.";
+            return;
+        }
+
         try
         {
-            FullJsonText = RecipeDeckDocument.FormatFullJson(FullJsonText);
-            StatusMessage = "JSON is valid and has been formatted.";
+            AssetJsonText = _document.ExportAssetText(SelectedAsset);
+            _loadedAssetBaseline = AssetJsonText;
+            LoadedAsset = SelectedAsset;
+            CanEditSelectedAsset = true;
+            bool isTextAsset = RecipeDeckDocument.IsEditableTextAsset(SelectedAsset);
+            AssetEditorTitle = isTextAsset ? $"{SelectedAsset.DisplayName} text" : "Selected component data";
+            AssetFormatButtonText = isTextAsset ? "Format JSON" : "Format / Check";
+            StatusMessage = isTextAsset
+                ? $"Editing the text inside {SelectedAsset.DisplayName}."
+                : $"Editing {SelectedAsset.DisplayName} ({SelectedAsset.ClassName}, path ID {SelectedAsset.PathId}).";
+        }
+        catch (Exception ex)
+        {
+            CanEditSelectedAsset = false;
+            StatusMessage = $"Could not view this component: {ex.Message}";
+        }
+    }
+
+    public void FormatAssetJson()
+    {
+        if (!CanEditSelectedAsset)
+        {
+            StatusMessage = "Select a component and tap View data first.";
+            return;
+        }
+
+        try
+        {
+            AssetJsonText = _document!.FormatAssetText(AssetJsonText, LoadedAsset!);
+            StatusMessage = RecipeDeckDocument.IsEditableTextAsset(LoadedAsset!)
+                ? "The embedded JSON is valid and has been formatted."
+                : "Component JSON is valid and has been formatted.";
         }
         catch (Exception ex)
         {
@@ -111,9 +185,11 @@ public sealed partial class MainViewModel : ViewModelBase
         }
     }
 
-    partial void OnSearchTextChanged(string value) => ApplyFilter();
+    partial void OnSearchTextChanged(string value) => ApplyDeckFilter();
 
-    private void ApplyFilter()
+    partial void OnAssetSearchTextChanged(string value) => ApplyAssetFilter();
+
+    private void ApplyDeckFilter()
     {
         DeckModel? previous = SelectedDeck;
         VisibleDecks.Clear();
@@ -134,5 +210,29 @@ public sealed partial class MainViewModel : ViewModelBase
         SelectedDeck = previous is not null && VisibleDecks.Contains(previous)
             ? previous
             : VisibleDecks.FirstOrDefault();
+    }
+
+    private void ApplyAssetFilter()
+    {
+        UnityAssetModel? previous = SelectedAsset;
+        VisibleAssets.Clear();
+
+        if (_document is null)
+            return;
+
+        IEnumerable<UnityAssetModel> filtered = _document.Assets;
+        if (!string.IsNullOrWhiteSpace(AssetSearchText))
+        {
+            string search = AssetSearchText.Trim();
+            filtered = filtered.Where(asset =>
+                asset.SearchText.Contains(search, StringComparison.OrdinalIgnoreCase));
+        }
+
+        foreach (UnityAssetModel asset in filtered)
+            VisibleAssets.Add(asset);
+
+        SelectedAsset = previous is not null && VisibleAssets.Contains(previous)
+            ? previous
+            : VisibleAssets.FirstOrDefault();
     }
 }

@@ -65,8 +65,8 @@ public partial class MainView : UserControl
         if (_openedFile is null || ViewModel.Document is null)
             return;
 
-        if (ViewModel.IsFullJsonEditorVisible)
-            ViewModel.FullJsonText = RawJsonEditor.Text ?? string.Empty;
+        if (ViewModel.IsAssetEditorVisible)
+            ViewModel.AssetJsonText = RawJsonEditor.Text ?? string.Empty;
 
         ViewModel.IsBusy = true;
         ViewModel.StatusMessage = "Rebuilding the Unity bundle…";
@@ -101,15 +101,22 @@ public partial class MainView : UserControl
 
     private void ToggleEditorMode_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        if (ViewModel.IsFullJsonEditorVisible)
-            ViewModel.FullJsonText = RawJsonEditor.Text ?? string.Empty;
+        if (ViewModel.IsAssetEditorVisible)
+            ViewModel.AssetJsonText = RawJsonEditor.Text ?? string.Empty;
         ViewModel.ToggleEditorMode();
     }
 
     private void FormatJson_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        ViewModel.FullJsonText = RawJsonEditor.Text ?? string.Empty;
-        ViewModel.FormatFullJson();
+        ViewModel.AssetJsonText = RawJsonEditor.Text ?? string.Empty;
+        ViewModel.FormatAssetJson();
+    }
+
+    private void ViewAsset_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (ViewModel.CanEditSelectedAsset)
+            ViewModel.AssetJsonText = RawJsonEditor.Text ?? string.Empty;
+        ViewModel.LoadSelectedAsset();
     }
 
     private void AddOverride_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
