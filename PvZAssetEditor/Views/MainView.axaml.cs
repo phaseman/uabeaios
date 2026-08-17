@@ -65,6 +65,9 @@ public partial class MainView : UserControl
         if (_openedFile is null || ViewModel.Document is null)
             return;
 
+        if (ViewModel.IsFullJsonEditorVisible)
+            ViewModel.FullJsonText = RawJsonEditor.Text ?? string.Empty;
+
         ViewModel.IsBusy = true;
         ViewModel.StatusMessage = "Rebuilding the Unity bundle…";
 
@@ -95,6 +98,19 @@ public partial class MainView : UserControl
 
     private void AddCard_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         => ViewModel.SelectedDeck?.AddCard(false);
+
+    private void ToggleEditorMode_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (ViewModel.IsFullJsonEditorVisible)
+            ViewModel.FullJsonText = RawJsonEditor.Text ?? string.Empty;
+        ViewModel.ToggleEditorMode();
+    }
+
+    private void FormatJson_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        ViewModel.FullJsonText = RawJsonEditor.Text ?? string.Empty;
+        ViewModel.FormatFullJson();
+    }
 
     private void AddOverride_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         => ViewModel.SelectedDeck?.AddCard(true);

@@ -9,6 +9,9 @@ This is a touch-friendly Unity bundle editor intended for sideloading through Li
 - List and search all deck `MonoBehaviour` assets.
 - Edit deck names, factions, card IDs, GUID/name values, copy counts, filters, and superpower overrides.
 - Add or remove card and override entries.
+- Open bundles without strategy decks as complete, formatted JSON and edit their Unity type-tree values directly.
+- Switch deck bundles between the guided strategy-deck editor and full-file JSON mode.
+- Validate JSON structure and protected asset IDs before rebuilding.
 - Rebuild the serialized asset and its containing Unity bundle.
 - Create a timestamped backup beside the selected file when a local path is available. For other file providers, the backup is stored in the editor's Files-visible `Documents/UnityAssetEditor/Backups` folder.
 

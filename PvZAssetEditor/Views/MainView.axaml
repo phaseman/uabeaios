@@ -57,7 +57,16 @@
                     </StackPanel>
                 </Border>
 
-                <StackPanel IsVisible="{Binding HasDocument}" Spacing="12">
+                <Grid IsVisible="{Binding HasDocument}" ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                    <TextBlock Grid.Column="0" Text="Editor mode" FontSize="15" FontWeight="SemiBold"
+                               VerticalAlignment="Center" />
+                    <Button Grid.Column="1" Classes="secondary"
+                            IsVisible="{Binding CanSwitchEditorMode}"
+                            Content="{Binding EditorModeButtonText}"
+                            Click="ToggleEditorMode_Click" />
+                </Grid>
+
+                <StackPanel IsVisible="{Binding IsDeckEditorVisible}" Spacing="12">
                     <TextBox Text="{Binding SearchText}" Watermark="Search deck names" />
                     <ComboBox ItemsSource="{Binding VisibleDecks}"
                               SelectedItem="{Binding SelectedDeck}"
@@ -165,6 +174,31 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
+                </StackPanel>
+
+                <StackPanel IsVisible="{Binding IsFullJsonEditorVisible}" Spacing="10">
+                    <Border Classes="card">
+                        <StackPanel Spacing="7">
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                                <TextBlock Grid.Column="0" Text="Complete Unity file data"
+                                           FontSize="17" FontWeight="Bold" VerticalAlignment="Center" />
+                                <Button Grid.Column="1" Classes="secondary" Content="Format / Check"
+                                        Click="FormatJson_Click" />
+                            </Grid>
+                            <TextBlock FontSize="12" Opacity="0.74" TextWrapping="Wrap"
+                                       Text="Edit values within each $data object. Keep $pathId and $classId unchanged. Assets that cannot be decoded remain listed with a $error value and are preserved when saving." />
+                        </StackPanel>
+                    </Border>
+
+                    <TextBox x:Name="RawJsonEditor"
+                             Text="{Binding FullJsonText, Mode=OneWay}"
+                             AcceptsReturn="True"
+                             TextWrapping="NoWrap"
+                             FontFamily="monospace"
+                             FontSize="12"
+                             MinHeight="620"
+                             ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto" />
                 </StackPanel>
             </StackPanel>
         </ScrollViewer>

@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using PvZAssetEditor.Core;
 
 if (args.Length != 1)
@@ -31,7 +32,29 @@ Require(
     "The edited card count did not survive the bundle rebuild.");
 Require(reopened.Decks.Count == original.Decks.Count, "The rebuild changed the number of decks.");
 
-Console.WriteLine($"PASS Unity={original.UnityVersion} Assets={original.AssetCount} Decks={original.Decks.Count} OutputBytes={rebuilt.Length}");
+await using FileStream rawInput = File.OpenRead(samplePath);
+using RecipeDeckDocument rawOriginal = RecipeDeckDocument.Load(rawInput, Path.GetFileName(samplePath));
+string fullJson = rawOriginal.ExportFullJson();
+JsonObject fullRoot = JsonNode.Parse(fullJson) as JsonObject
+    ?? throw new InvalidDataException("Full-file JSON did not parse as an object.");
+JsonArray fullAssets = fullRoot["assets"] as JsonArray
+    ?? throw new InvalidDataException("Full-file JSON did not contain an assets array.");
+Require(fullAssets.Count == rawOriginal.AssetCount, "Full-file JSON did not list every asset.");
+
+const string rawEditedName = "Deck_GreenShadow_R1_JSON_TEST";
+JsonObject rawDeckEntry = fullAssets
+    .OfType<JsonObject>()
+    .Single(entry => entry["$data"]?["m_Name"]?.GetValue<string>() == "Deck_GreenShadow_R1");
+rawDeckEntry["$data"]!["m_Name"] = rawEditedName;
+
+byte[] rawRebuilt = rawOriginal.BuildFromFullJson(fullRoot.ToJsonString());
+await using var rawRebuiltStream = new MemoryStream(rawRebuilt, writable: false);
+using RecipeDeckDocument rawReopened = RecipeDeckDocument.Load(rawRebuiltStream, "rebuilt_full_json");
+Require(
+    rawReopened.Decks.Any(deck => deck.Name == rawEditedName),
+    "The full-file JSON edit did not survive the bundle rebuild.");
+
+Console.WriteLine($"PASS Unity={original.UnityVersion} Assets={original.AssetCount} Decks={original.Decks.Count} DeckBytes={rebuilt.Length} JsonBytes={rawRebuilt.Length}");
 return 0;
 
 static void Require(bool condition, string message)

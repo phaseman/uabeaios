@@ -30,6 +30,21 @@ public sealed partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isBusy;
 
+    [ObservableProperty]
+    private string _fullJsonText = string.Empty;
+
+    [ObservableProperty]
+    private bool _isDeckEditorVisible;
+
+    [ObservableProperty]
+    private bool _isFullJsonEditorVisible;
+
+    [ObservableProperty]
+    private bool _canSwitchEditorMode;
+
+    [ObservableProperty]
+    private string _editorModeButtonText = "Full JSON";
+
     public ObservableCollection<DeckModel> VisibleDecks { get; } = [];
 
     public RecipeDeckDocument? Document => _document;
@@ -39,16 +54,62 @@ public sealed partial class MainViewModel : ViewModelBase
         _document?.Dispose();
         _document = document;
         FileName = document.SourceName;
-        FileSummary = $"Unity {document.UnityVersion} • {document.Decks.Count} decks • {document.AssetCount} assets";
+        FileSummary = document.Decks.Count > 0
+            ? $"Unity {document.UnityVersion} • {document.Decks.Count} decks • {document.AssetCount} assets"
+            : $"Unity {document.UnityVersion} • Full JSON • {document.AssetCount} assets";
         HasDocument = true;
+        CanSwitchEditorMode = document.Decks.Count > 0;
+        IsDeckEditorVisible = CanSwitchEditorMode;
+        IsFullJsonEditorVisible = !CanSwitchEditorMode;
+        EditorModeButtonText = IsFullJsonEditorVisible ? "Strategy decks" : "Full JSON";
+        FullJsonText = IsFullJsonEditorVisible ? document.ExportFullJson() : string.Empty;
         SearchText = string.Empty;
         ApplyFilter();
         SelectedDeck = VisibleDecks.FirstOrDefault();
-        StatusMessage = "Ready. Select a deck, make changes, then tap Save.";
+        StatusMessage = IsFullJsonEditorVisible
+            ? "Full JSON mode. Edit values inside $data, then tap Save. Metadata beginning with $ is protected."
+            : "Ready. Select a deck, make changes, then tap Save.";
     }
 
     public byte[] BuildDocument()
-        => _document?.Build() ?? throw new InvalidOperationException("No file is open.");
+    {
+        if (_document is null)
+            throw new InvalidOperationException("No file is open.");
+
+        return IsFullJsonEditorVisible
+            ? _document.BuildFromFullJson(FullJsonText)
+            : _document.Build();
+    }
+
+    public void ToggleEditorMode()
+    {
+        if (_document is null || !CanSwitchEditorMode)
+            return;
+
+        IsFullJsonEditorVisible = !IsFullJsonEditorVisible;
+        IsDeckEditorVisible = !IsFullJsonEditorVisible;
+        EditorModeButtonText = IsFullJsonEditorVisible ? "Strategy decks" : "Full JSON";
+
+        if (IsFullJsonEditorVisible && string.IsNullOrEmpty(FullJsonText))
+            FullJsonText = _document.ExportFullJson();
+
+        StatusMessage = IsFullJsonEditorVisible
+            ? "Full JSON mode. Edit values inside $data, then tap Save. Metadata beginning with $ is protected."
+            : "Strategy deck mode. Select a deck, make changes, then tap Save.";
+    }
+
+    public void FormatFullJson()
+    {
+        try
+        {
+            FullJsonText = RecipeDeckDocument.FormatFullJson(FullJsonText);
+            StatusMessage = "JSON is valid and has been formatted.";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"JSON is not valid: {ex.Message}";
+        }
+    }
 
     partial void OnSearchTextChanged(string value) => ApplyFilter();
 
