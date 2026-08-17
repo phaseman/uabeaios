@@ -10,7 +10,7 @@
     <ApplicationVersion>1</ApplicationVersion>
     <ArchiveOnBuild>true</ArchiveOnBuild>
     <BuildIpa>true</BuildIpa>
-    <CodesignEntitlements>Entitlements.plist</CodesignEntitlements>
+    <CodesignEntitlements Condition="'$(EnableCodeSigning)' != 'false'">Entitlements.plist</CodesignEntitlements>
     <Nullable>enable</Nullable>
   </PropertyGroup>
 

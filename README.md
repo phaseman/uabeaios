@@ -44,7 +44,9 @@ dotnet publish PvZAssetEditor.iOS/PvZAssetEditor.iOS.csproj \
   -c Release \
   -f net8.0-ios \
   -p:RuntimeIdentifier=ios-arm64 \
-  -p:CodesignKey=- \
+  -p:EnableCodeSigning=false \
+  -p:CodesignRequireProvisioningProfile=false \
+  -p:EnableDefaultCodesignEntitlements=false \
   -p:ArchiveOnBuild=true \
   -p:BuildIpa=true
 ```

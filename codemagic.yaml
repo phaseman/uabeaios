@@ -37,7 +37,9 @@ workflows:
             --framework net8.0-ios \
             --no-restore \
             -p:RuntimeIdentifier=ios-arm64 \
-            -p:CodesignKey=- \
+            -p:EnableCodeSigning=false \
+            -p:CodesignRequireProvisioningProfile=false \
+            -p:EnableDefaultCodesignEntitlements=false \
             -p:ArchiveOnBuild=false \
             -p:BuildIpa=false
 
