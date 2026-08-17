@@ -1,0 +1,44 @@
+name: Build sideloadable iOS IPA
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Select Xcode 16.2
+        run: sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
+
+      - name: Install .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.422
+
+      - name: Install the iOS workload
+        run: dotnet workload install ios --skip-manifest-update
+
+      - name: Publish IPA for SideStore
+        run: >-
+          dotnet publish PvZAssetEditor.iOS/PvZAssetEditor.iOS.csproj
+          -c Release
+          -f net8.0-ios
+          -p:RuntimeIdentifier=ios-arm64
+          -p:CodesignKey=-
+          -p:ArchiveOnBuild=true
+          -p:BuildIpa=true
+
+      - name: Collect IPA
+        run: |
+          mkdir -p artifacts
+          find PvZAssetEditor.iOS/bin/Release -name '*.ipa' -exec cp {} artifacts/UnityAssetEditor.ipa \;
+          test -f artifacts/UnityAssetEditor.ipa
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: UnityAssetEditor-IPA
+          path: artifacts/UnityAssetEditor.ipa

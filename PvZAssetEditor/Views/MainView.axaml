@@ -1,0 +1,172 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:PvZAssetEditor.ViewModels"
+             xmlns:models="using:PvZAssetEditor.Models"
+             mc:Ignorable="d"
+             d:DesignWidth="430"
+             d:DesignHeight="900"
+             x:Class="PvZAssetEditor.Views.MainView"
+             x:DataType="vm:MainViewModel">
+
+    <UserControl.Styles>
+        <Style Selector="Button.primary">
+            <Setter Property="Background" Value="#4D9B53" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="CornerRadius" Value="10" />
+            <Setter Property="Padding" Value="16,10" />
+        </Style>
+        <Style Selector="Button.secondary">
+            <Setter Property="CornerRadius" Value="10" />
+            <Setter Property="Padding" Value="16,10" />
+        </Style>
+        <Style Selector="Border.card">
+            <Setter Property="Background" Value="#142018" />
+            <Setter Property="BorderBrush" Value="#304837" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="14" />
+            <Setter Property="Padding" Value="14" />
+        </Style>
+        <Style Selector="TextBlock.label">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Opacity" Value="0.72" />
+        </Style>
+    </UserControl.Styles>
+
+    <Grid RowDefinitions="Auto,*" Background="#0B120D">
+        <Border Grid.Row="0" Background="#101A13" BorderBrush="#263A2B" BorderThickness="0,0,0,1">
+            <Grid ColumnDefinitions="*,Auto,Auto" Margin="16,12" ColumnSpacing="8">
+                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                    <TextBlock Text="Unity Asset Editor" FontSize="19" FontWeight="Bold" />
+                    <TextBlock Text="{Binding FileName}" FontSize="11" Opacity="0.68" TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+                <Button Grid.Column="1" Classes="secondary" Content="Open" Click="OpenFile_Click" />
+                <Button Grid.Column="2" Classes="primary" Content="Save" Click="SaveFile_Click"
+                        IsEnabled="{Binding HasDocument}" />
+            </Grid>
+        </Border>
+
+        <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Margin="16" Spacing="14">
+                <Border Classes="card">
+                    <StackPanel Spacing="5">
+                        <TextBlock Text="{Binding FileSummary}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding StatusMessage}" FontSize="12" Opacity="0.76" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+
+                <StackPanel IsVisible="{Binding HasDocument}" Spacing="12">
+                    <TextBox Text="{Binding SearchText}" Watermark="Search deck names" />
+                    <ComboBox ItemsSource="{Binding VisibleDecks}"
+                              SelectedItem="{Binding SelectedDeck}"
+                              HorizontalAlignment="Stretch">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="models:DeckModel">
+                                <TextBlock Text="{Binding Name}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+
+                    <Border Classes="card" IsVisible="{Binding HasDocument}">
+                        <StackPanel Spacing="12">
+                            <TextBlock Text="Deck details" FontSize="17" FontWeight="Bold" />
+                            <Grid ColumnDefinitions="*,110" ColumnSpacing="10">
+                                <StackPanel Grid.Column="0" Spacing="4">
+                                    <TextBlock Classes="label" Text="Asset name" />
+                                    <TextBox Text="{Binding SelectedDeck.Name}" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Spacing="4">
+                                    <TextBlock Classes="label" Text="Faction" />
+                                    <NumericUpDown Value="{Binding SelectedDeck.Faction}" Minimum="0" Maximum="10" />
+                                </StackPanel>
+                            </Grid>
+                            <TextBlock Text="{Binding SelectedDeck.TotalCards, StringFormat='Deck total: {0} cards'}"
+                                       FontWeight="SemiBold" />
+                        </StackPanel>
+                    </Border>
+
+                    <Grid ColumnDefinitions="*,Auto" Margin="2,6,2,0">
+                        <TextBlock Grid.Column="0" Text="Cards" FontSize="20" FontWeight="Bold" VerticalAlignment="Center" />
+                        <Button Grid.Column="1" Classes="secondary" Content="Add card" Click="AddCard_Click" />
+                    </Grid>
+
+                    <ItemsControl ItemsSource="{Binding SelectedDeck.Cards}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:CardEntryModel">
+                                <Border Classes="card" Margin="0,0,0,10">
+                                    <StackPanel Spacing="9">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <TextBlock Grid.Column="0" Text="Card entry" FontWeight="SemiBold" />
+                                            <Button Grid.Column="1" Content="Remove" Click="RemoveCard_Click" Padding="10,5" />
+                                        </Grid>
+                                        <WrapPanel Orientation="Horizontal">
+                                            <StackPanel Width="105" Margin="0,0,8,0" Spacing="3">
+                                                <TextBlock Classes="label" Text="Card ID" />
+                                                <NumericUpDown Value="{Binding CardGuid}" Minimum="0" Maximum="999999" />
+                                            </StackPanel>
+                                            <StackPanel Width="90" Margin="0,0,8,0" Spacing="3">
+                                                <TextBlock Classes="label" Text="Copies" />
+                                                <NumericUpDown Value="{Binding NumCopies}" Minimum="0" Maximum="99" />
+                                            </StackPanel>
+                                            <StackPanel Width="90" Spacing="3">
+                                                <TextBlock Classes="label" Text="Faction" />
+                                                <NumericUpDown Value="{Binding Faction}" Minimum="0" Maximum="10" />
+                                            </StackPanel>
+                                        </WrapPanel>
+                                        <StackPanel Spacing="3">
+                                            <TextBlock Classes="label" Text="GUID or card name" />
+                                            <TextBox Text="{Binding Guid}" />
+                                        </StackPanel>
+                                        <StackPanel Spacing="3">
+                                            <TextBlock Classes="label" Text="Filter" />
+                                            <TextBox Text="{Binding Filter}" Watermark="Optional" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <Grid ColumnDefinitions="*,Auto" Margin="2,10,2,0">
+                        <TextBlock Grid.Column="0" Text="Superpower overrides" FontSize="20" FontWeight="Bold"
+                                   VerticalAlignment="Center" />
+                        <Button Grid.Column="1" Classes="secondary" Content="Add override" Click="AddOverride_Click" />
+                    </Grid>
+
+                    <ItemsControl ItemsSource="{Binding SelectedDeck.SuperpowerOverrides}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:CardEntryModel">
+                                <Border Classes="card" Margin="0,0,0,10">
+                                    <StackPanel Spacing="9">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <TextBlock Grid.Column="0" Text="Override entry" FontWeight="SemiBold" />
+                                            <Button Grid.Column="1" Content="Remove" Click="RemoveOverride_Click" Padding="10,5" />
+                                        </Grid>
+                                        <WrapPanel Orientation="Horizontal">
+                                            <StackPanel Width="105" Margin="0,0,8,0" Spacing="3">
+                                                <TextBlock Classes="label" Text="Card ID" />
+                                                <NumericUpDown Value="{Binding CardGuid}" Minimum="0" Maximum="999999" />
+                                            </StackPanel>
+                                            <StackPanel Width="90" Margin="0,0,8,0" Spacing="3">
+                                                <TextBlock Classes="label" Text="Copies" />
+                                                <NumericUpDown Value="{Binding NumCopies}" Minimum="0" Maximum="99" />
+                                            </StackPanel>
+                                            <StackPanel Width="90" Spacing="3">
+                                                <TextBlock Classes="label" Text="Faction" />
+                                                <NumericUpDown Value="{Binding Faction}" Minimum="0" Maximum="10" />
+                                            </StackPanel>
+                                        </WrapPanel>
+                                        <TextBox Text="{Binding Guid}" Watermark="GUID or card name" />
+                                        <TextBox Text="{Binding Filter}" Watermark="Optional filter" />
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

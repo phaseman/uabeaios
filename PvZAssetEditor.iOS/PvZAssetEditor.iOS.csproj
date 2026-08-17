@@ -1,0 +1,24 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-ios</TargetFramework>
+    <RuntimeIdentifier>ios-arm64</RuntimeIdentifier>
+    <SupportedOSPlatformVersion>15.0</SupportedOSPlatformVersion>
+    <ApplicationTitle>Unity Asset Editor</ApplicationTitle>
+    <ApplicationId>com.luke.unityasseteditor</ApplicationId>
+    <ApplicationDisplayVersion>0.1.0</ApplicationDisplayVersion>
+    <ApplicationVersion>1</ApplicationVersion>
+    <ArchiveOnBuild>true</ArchiveOnBuild>
+    <BuildIpa>true</BuildIpa>
+    <CodesignEntitlements>Entitlements.plist</CodesignEntitlements>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia.iOS" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PvZAssetEditor\PvZAssetEditor.csproj" />
+  </ItemGroup>
+</Project>

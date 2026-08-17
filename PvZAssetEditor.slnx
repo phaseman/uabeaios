@@ -1,0 +1,8 @@
+﻿<Solution>
+  <Project Path="PvZAssetEditor.Desktop/PvZAssetEditor.Desktop.csproj" />
+  <Project Path="PvZAssetEditor.iOS/PvZAssetEditor.iOS.csproj">
+    <Deploy />
+  </Project>
+  <Project Path="PvZAssetEditor.Verifier/PvZAssetEditor.Verifier.csproj" />
+  <Project Path="PvZAssetEditor/PvZAssetEditor.csproj" />
+</Solution>
